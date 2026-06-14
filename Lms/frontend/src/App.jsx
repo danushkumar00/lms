@@ -5,11 +5,13 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import SignIn from '../Pages/SignIn'; 
 import StudentDashboard from '../Pages/StudentDashboard';
 import TrainerDashboard from '../Pages/TrainerDashboard';
+import SignUp from '../Pages/SignUp';
 
-// 🌟 Import your new curriculum views
+
 import UploadCourse from '../Pages/UploadCourse';
 import AddChapter from '../Pages/AddChapter';
 import CourseDetails from '../Pages/CourseDetails';
+import AuthLayout from "./layouts/authLayout"
 
 function App() {
   return (
@@ -19,6 +21,10 @@ function App() {
         <Route path="/SignIn" element={<SignIn />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
         <Route path="/trainer-dashboard" element={<TrainerDashboard />} />
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<SignIn />} />
+          <Route path="/signup" element={<SignUp />} />
+        </Route>
 
         {/* 🌟 Hook Up Your New Course Management Pages */}
         <Route path="/trainer/upload-course" element={<UploadCourse />} />
