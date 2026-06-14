@@ -16,7 +16,8 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors()); // Allows your React frontend to communicate with this API
+app.use(cors({origin: 'https://your-app.vercel.app', // your exact Vercel URL
+  credentials: true})); // Allows your React frontend to communicate with this API
 app.use(express.json()); // Parses incoming JSON requests
 
 // Routes
