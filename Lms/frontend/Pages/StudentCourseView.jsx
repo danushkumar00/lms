@@ -38,7 +38,7 @@ const StudentCourseView = () => {
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) { navigate('/login'); return; }
-    axios.get(`http://localhost:5001/api/courses/${id}`)
+    axios.get(`${import.meta.env.VITE_API_URL}/api/courses/${id}`)
       .then(({ data }) => { setCourse(data); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
   }, [id, navigate]);

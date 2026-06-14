@@ -69,7 +69,7 @@ const UploadCourse = () => {
     payload.append('activityData', JSON.stringify(processedActivities));
 
     try {
-      await axios.post('http://localhost:5001/api/courses/create', payload, {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/courses/create`, payload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert("Course created successfully!");

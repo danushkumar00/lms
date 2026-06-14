@@ -4,7 +4,7 @@ import axios from 'axios';
 // Thunk for Login
 export const login = createAsyncThunk('auth/login', async (formData, { rejectWithValue }) => {
   try {
-    const response = await axios.post('http://localhost:5001/api/auth/login', formData);
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, formData);
     localStorage.setItem('user', JSON.stringify(response.data));
     return response.data;
   } catch (error) {
@@ -15,7 +15,7 @@ export const login = createAsyncThunk('auth/login', async (formData, { rejectWit
 // Thunk for Registration
 export const register = createAsyncThunk('auth/register', async (formData, { rejectWithValue }) => {
   try {
-    const response = await axios.post('http://localhost:5001/api/auth/register', formData);
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, formData);
     return response.data;
   } catch (error) {
     return rejectWithValue(error.response?.data?.message || 'Registration failed');

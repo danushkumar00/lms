@@ -25,7 +25,7 @@ const StudentDashboard = () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setUserId(user._id || user.id || null);
 
-    axios.get('http://localhost:5001/api/courses')
+    axios.get(`${import.meta.env.VITE_API_URL}/api/courses`)
       .then(({ data }) => setCourses(data))
       .catch(err => console.error(err));
   }, []);

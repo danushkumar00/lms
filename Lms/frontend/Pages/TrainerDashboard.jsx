@@ -11,7 +11,7 @@ const TrainerDashboard = () => {
 
   const fetchDashboardCatalog = () => {
     setLoading(true);
-    axios.get('http://localhost:5001/api/courses')
+    axios.get(`${import.meta.env.VITE_API_URL}/api/courses`)
       .then((res) => { setCourses(res.data); setLoading(false); })
       .catch((err) => { console.error(err); setLoading(false); });
   };
@@ -35,7 +35,7 @@ const TrainerDashboard = () => {
     if (!safetyVerification) return;
 
     try {
-      await axios.delete(`http://localhost:5001/api/courses/${courseId}`);
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/courses/${courseId}`);
       setCourses(prev => prev.filter(c => c._id !== courseId));
     } catch (err) {
       alert(`Delete failed: ${err.response?.data?.message || err.message}`);

@@ -17,7 +17,7 @@ const AddChapter = () => {
   const [matchPairs, setMatchPairs] = useState([{ left: '', right: '' }]);
 
   useEffect(() => {
-    axios.get('http://localhost:5001/api/courses').then(res => {
+    axios.get(`${import.meta.env.VITE_API_URL}/api/courses`).then(res => {
       setCourses(res.data);
       if (res.data.length > 0) setSelectedCourseId(res.data[0]._id);
     });
@@ -61,7 +61,7 @@ const AddChapter = () => {
 
     try {
       setIsUploading(true);
-      await axios.post(`http://localhost:5001/api/courses/${selectedCourseId}/add-chapter`, payload, {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/courses/${selectedCourseId}/add-chapter`, payload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert("Lesson Module appended to curriculum roadmap successfully!");
