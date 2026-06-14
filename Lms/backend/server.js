@@ -16,7 +16,7 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors({origin: ['https://your-app.vercel.app','https://lms-orpin-psi.vercel.app/'],
+app.use(cors({origin: ['https://lms-orpin-psi.vercel.app','https://lms-orpin-psi.vercel.app/'],
   credentials: true})); 
 app.use(express.json());
 
