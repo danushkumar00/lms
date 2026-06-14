@@ -4,7 +4,7 @@ const StudentLayout = ({ children }) => {
   return (
     <div className="flex flex-col min-h-screen">
       
-      {/* Your Existing Header */}
+  
       <Header>
         
 
@@ -12,12 +12,11 @@ const StudentLayout = ({ children }) => {
               </Header>
       
 
-      {/* 2. 🌟 THE FIX: Create a main slot and inject {children} right here */}
       <main className="flex-1 w-full relative">
         {children} 
       </main>
 
-      {/* Your Existing Footer */}
+   
       <Footer>
         © 2026 Portal. All rights reserved.
       </Footer>

@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import StudentLayout from '../src/layouts/StudentLayout';
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
 const getProgressStore = () => JSON.parse(localStorage.getItem('lms_progress') || '{}');
 const markChapterComplete = (userId, courseId, chapterIdx) => {
   const store = getProgressStore();
@@ -13,7 +12,7 @@ const markChapterComplete = (userId, courseId, chapterIdx) => {
   store[key] = [...completed];
   localStorage.setItem('lms_progress', JSON.stringify(store));
 };
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const StudentCourseView = () => {
   const { id } = useParams();

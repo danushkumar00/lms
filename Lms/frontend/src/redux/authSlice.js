@@ -39,12 +39,12 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Login cases
+    
       .addCase(login.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(login.fulfilled, (state, action) => { state.loading = false; state.userInfo = action.payload; })
       .addCase(login.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       
-      // Register cases - NOW INTEGRATED
+      
       .addCase(register.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(register.fulfilled, (state) => { state.loading = false; })
       .addCase(register.rejected, (state, action) => { state.loading = false; state.error = action.payload; });

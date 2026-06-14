@@ -1,4 +1,4 @@
-// backend/models/Course.js
+
 import mongoose from 'mongoose';
 
 const activitySchema = new mongoose.Schema({

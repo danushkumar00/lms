@@ -4,7 +4,7 @@ import Course from '../models/Course.js';
 
 const router = express.Router();
 
-// 1. Create a New Course with its Initial Chapter & Multi-Question Activity
+//  Create a New Course with its Initial Chapter & Multi-Question Activity
 router.post('/create', upload.single('video'), async (req, res) => {
   try {
     const { title, description, chapterTitle, activityData } = req.body;
@@ -20,6 +20,7 @@ router.post('/create', upload.single('video'), async (req, res) => {
         title: chapterTitle, 
         videoUrl: cloudMedia.url, 
         publicId: cloudMedia.publicId,
+        
         activities: parsedActivity // Updated to store array of activities
       }]
     });
@@ -31,7 +32,7 @@ router.post('/create', upload.single('video'), async (req, res) => {
   }
 });
 
-// 2. Add a New Chapter to an Existing Course
+//  Add a New Chapter to an Existing Course
 router.post('/:id/add-chapter', upload.single('video'), async (req, res) => {
   try {
     const { chapterTitle, activityData } = req.body;
@@ -56,7 +57,7 @@ router.post('/:id/add-chapter', upload.single('video'), async (req, res) => {
   }
 });
 
-// 3. Get All Courses
+// Get All Courses
 router.get('/', async (req, res) => {
   try {
     const courses = await Course.find().sort({ createdAt: -1 });
@@ -66,7 +67,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 4. Get a Single Course Detail
+//  Get a Single Course Detail
 router.get('/:id', async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
@@ -77,7 +78,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 5. Update Course Metadata, Replace Videos, or Save Global Activity Changes
+//  Update Course Metadata, Replace Videos, or Save Global Activity Changes
 router.put('/:id', upload.single('video'), async (req, res) => {
   try {
     const { title, description, chaptersData } = req.body; 
@@ -107,7 +108,7 @@ router.put('/:id', upload.single('video'), async (req, res) => {
   }
 });
 
-// 6. Delete a Specific Chapter
+//  Delete a Specific Chapter
 router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
   try {
     const { courseId, chapterId, publicId } = req.params;
@@ -123,13 +124,13 @@ router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
   }
 });
 
-// 7. NEW: Delete an Entire Course (Fixes the 404 Error)
+
 router.delete('/:id', async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
-    // Delete all associated videos from Cloudinary
+  
     for (const chapter of course.chapters) {
       if (chapter.publicId) {
         await cloudinary.uploader.destroy(chapter.publicId, { resource_type: 'video' });

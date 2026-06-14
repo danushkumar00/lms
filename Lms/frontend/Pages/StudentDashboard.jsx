@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import  { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import StudentLayout from '../src/layouts/StudentLayout';
 
-// Reads the same key that StudentCourseView writes to
 const getCompletedChapters = (userId, courseId) => {
   const store = JSON.parse(localStorage.getItem('lms_progress') || '{}');
   return new Set(store[`${userId}:${courseId}`] || []);
