@@ -11,7 +11,7 @@ router.post('/create', upload.single('video'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No video file provided' });
 
     const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
-    const parsedActivity = activityData ? JSON.parse(activityData) : { activityType: 'fill-blanks', fillBlanks: [], matchPairs: [] };
+    const parsedActivity = activityData ? JSON.parse(activityData) : [];
 
     const newCourse = new Course({
       title,
@@ -20,7 +20,7 @@ router.post('/create', upload.single('video'), async (req, res) => {
         title: chapterTitle, 
         videoUrl: cloudMedia.url, 
         publicId: cloudMedia.publicId,
-        activity: parsedActivity
+        activities: parsedActivity // Updated to store array of activities
       }]
     });
 
@@ -31,7 +31,7 @@ router.post('/create', upload.single('video'), async (req, res) => {
   }
 });
 
-// 2. Add a New Chapter & Multi-Question Activity to an Existing Course
+// 2. Add a New Chapter to an Existing Course
 router.post('/:id/add-chapter', upload.single('video'), async (req, res) => {
   try {
     const { chapterTitle, activityData } = req.body;
@@ -40,13 +40,13 @@ router.post('/:id/add-chapter', upload.single('video'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No video file provided' });
 
     const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
-    const parsedActivity = activityData ? JSON.parse(activityData) : { activityType: 'fill-blanks', fillBlanks: [], matchPairs: [] };
+    const parsedActivity = activityData ? JSON.parse(activityData) : [];
     
     course.chapters.push({ 
       title: chapterTitle, 
       videoUrl: cloudMedia.url, 
       publicId: cloudMedia.publicId,
-      activity: parsedActivity
+      activities: parsedActivity
     });
     
     await course.save();
@@ -111,7 +111,7 @@ router.put('/:id', upload.single('video'), async (req, res) => {
 router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
   try {
     const { courseId, chapterId, publicId } = req.params;
-    await cloudinary.uploader.destroy(`courses/${publicId}`, { resource_type: 'video' });
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
     
     await Course.findByIdAndUpdate(courseId, {
       $pull: { chapters: { _id: chapterId } }
@@ -123,27 +123,21 @@ router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
   }
 });
 
-// 7. NEW: Delete an Entire Course (Wipes all associated Cloudinary video nodes first)
+// 7. NEW: Delete an Entire Course (Fixes the 404 Error)
 router.delete('/:id', async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
-    if (!course) return res.status(404).json({ message: 'Course profile metadata context not found.' });
+    if (!course) return res.status(404).json({ message: 'Course not found' });
 
-    // Loop through and systematically destroy all attached binary video layouts on Cloudinary
-    if (course.chapters && course.chapters.length > 0) {
-      const deletionPromises = course.chapters.map(chapter => {
-        if (chapter.publicId) {
-          // Extracts the final key node context matching your storage configuration
-          const cleanId = chapter.publicId.split('/').pop();
-          return cloudinary.uploader.destroy(`courses/${cleanId}`, { resource_type: 'video' });
-        }
-        return Promise.resolve();
-      });
-      await Promise.all(deletionPromises);
+    // Delete all associated videos from Cloudinary
+    for (const chapter of course.chapters) {
+      if (chapter.publicId) {
+        await cloudinary.uploader.destroy(chapter.publicId, { resource_type: 'video' });
+      }
     }
 
     await Course.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Unified curriculum roadmap and cloud media purged successfully.' });
+    res.status(200).json({ message: 'Course purged successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
