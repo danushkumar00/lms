@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import StudentLayout from '../src/layouts/StudentLayout';
 
@@ -10,8 +10,17 @@ const getCompletedChapters = (userId, courseId) => {
 };
 
 const StudentDashboard = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [userId, setUserId] = useState(null);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('user');
+    sessionStorage.clear();
+    window.location.href = '/login';
+  };
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -31,7 +40,15 @@ const StudentDashboard = () => {
   return (
     <StudentLayout>
       <div className="p-8 max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">My Learning Dashboard</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">My Learning Dashboard</h1>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-sm rounded-lg transition-colors"
+          >
+            Logout
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {courses.map(course => {
