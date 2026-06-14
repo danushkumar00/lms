@@ -20,10 +20,7 @@ function App() {
       <Route path="/student-dashboard" element={<StudentDashboard />} />
       <Route path="/trainer-dashboard" element={<TrainerDashboard />} />
       <Route path="/login" element={<SignIn />} />
-      <Route element={<AuthLayout />}>
-        <Route path="/signup" element={<SignUp />} />
-      </Route>
-
+      <Route path="/signup" element={<SignUp />} />
       <Route path="/trainer/upload-course" element={<UploadCourse />} />
       <Route path="/trainer/add-chapter" element={<AddChapter />} />
       <Route path="/trainer/course/:id" element={<CourseDetails />} />
