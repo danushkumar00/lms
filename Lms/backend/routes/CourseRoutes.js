@@ -1,27 +1,26 @@
-// backend/routes/CourseRoutes.js
 import express from 'express';
 import { upload, uploadVideoToCloudinary, cloudinary } from '../config/cloudinary.js';
 import Course from '../models/Course.js';
 
 const router = express.Router();
 
-// 1. Create Course with N Timed Activities
+// 1. Create a New Course with its Initial Chapter & Multi-Question Activity
 router.post('/create', upload.single('video'), async (req, res) => {
   try {
-    const { title, description, chapterTitle, activities } = req.body;
-    if (!req.file) return res.status(400).json({ message: 'Missing video asset file.' });
+    const { title, description, chapterTitle, activityData } = req.body;
+    if (!req.file) return res.status(400).json({ message: 'No video file provided' });
 
     const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
-    const parsedActivities = activities ? JSON.parse(activities) : [];
+    const parsedActivity = activityData ? JSON.parse(activityData) : { activityType: 'fill-blanks', fillBlanks: [], matchPairs: [] };
 
     const newCourse = new Course({
       title,
       description,
-      chapters: [{
-        title: chapterTitle,
-        videoUrl: cloudMedia.url,
+      chapters: [{ 
+        title: chapterTitle, 
+        videoUrl: cloudMedia.url, 
         publicId: cloudMedia.publicId,
-        activities: parsedActivities
+        activity: parsedActivity
       }]
     });
 
@@ -32,57 +31,24 @@ router.post('/create', upload.single('video'), async (req, res) => {
   }
 });
 
-// 2. Add Chapter with N Timed Activities to Existing Course
+// 2. Add a New Chapter & Multi-Question Activity to an Existing Course
 router.post('/:id/add-chapter', upload.single('video'), async (req, res) => {
   try {
-    const { chapterTitle, activities } = req.body;
+    const { chapterTitle, activityData } = req.body;
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ message: 'Course not found' });
-    if (!req.file) return res.status(400).json({ message: 'Missing video asset file.' });
+    if (!req.file) return res.status(400).json({ message: 'No video file provided' });
 
     const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
-    const parsedActivities = activities ? JSON.parse(activities) : [];
-
-    course.chapters.push({
-      title: chapterTitle,
-      videoUrl: cloudMedia.url,
-      publicId: cloudMedia.publicId,
-      activities: parsedActivities
-    });
-
-    await course.save();
-    res.status(200).json(course);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// 3. Complete Course Update & Overwrite (Handles full CRUD tracking of chapters & activities)
-router.put('/:id', upload.single('video'), async (req, res) => {
-  try {
-    const { title, description, chapters } = req.body;
-    const course = await Course.findById(req.params.id);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-
-    if (title) course.title = title;
-    if (description) course.description = description;
+    const parsedActivity = activityData ? JSON.parse(activityData) : { activityType: 'fill-blanks', fillBlanks: [], matchPairs: [] };
     
-    // Direct state sync update if full chapters array passed down
-    if (chapters) {
-      course.chapters = JSON.parse(chapters);
-    }
-
-    // Handle specific file replacements if flag is active
-    if (req.file && req.body.replaceIndex !== undefined) {
-      const idx = parseInt(req.body.replaceIndex);
-      if (course.chapters[idx]) {
-        await cloudinary.uploader.destroy(course.chapters[idx].publicId, { resource_type: 'video' });
-        const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
-        course.chapters[idx].videoUrl = cloudMedia.url;
-        course.chapters[idx].publicId = cloudMedia.publicId;
-      }
-    }
-
+    course.chapters.push({ 
+      title: chapterTitle, 
+      videoUrl: cloudMedia.url, 
+      publicId: cloudMedia.publicId,
+      activity: parsedActivity
+    });
+    
     await course.save();
     res.status(200).json(course);
   } catch (err) {
@@ -90,7 +56,7 @@ router.put('/:id', upload.single('video'), async (req, res) => {
   }
 });
 
-// 4. Get All Courses
+// 3. Get All Courses
 router.get('/', async (req, res) => {
   try {
     const courses = await Course.find().sort({ createdAt: -1 });
@@ -100,18 +66,48 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 5. Get Single Course
+// 4. Get a Single Course Detail
 router.get('/:id', async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
-    if (!course) return res.status(404).json({ message: 'Course record missing.' });
+    if (!course) return res.status(404).json({ message: 'Course not found' });
     res.status(200).json(course);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// 6. Delete Chapter Complete
+// 5. Update Course Metadata, Replace Videos, or Save Global Activity Changes
+router.put('/:id', upload.single('video'), async (req, res) => {
+  try {
+    const { title, description, chaptersData } = req.body; 
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
+    course.title = title || course.title;
+    course.description = description || course.description;
+
+    if (chaptersData) {
+      course.chapters = JSON.parse(chaptersData);
+    }
+
+    if (req.file && req.body.replaceIndex !== undefined) {
+      const index = parseInt(req.body.replaceIndex);
+      await cloudinary.uploader.destroy(course.chapters[index].publicId, { resource_type: 'video' });
+      
+      const cloudMedia = await uploadVideoToCloudinary(req.file.buffer);
+      course.chapters[index].videoUrl = cloudMedia.url;
+      course.chapters[index].publicId = cloudMedia.publicId;
+    }
+
+    await course.save();
+    res.status(200).json(course);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 6. Delete a Specific Chapter
 router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
   try {
     const { courseId, chapterId, publicId } = req.params;
@@ -120,7 +116,34 @@ router.delete('/:courseId/chapter/:chapterId/:publicId', async (req, res) => {
     await Course.findByIdAndUpdate(courseId, {
       $pull: { chapters: { _id: chapterId } }
     });
-    res.status(200).json({ message: 'Chapter pulled successfully.' });
+
+    res.status(200).json({ message: 'Chapter removed successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 7. NEW: Delete an Entire Course (Wipes all associated Cloudinary video nodes first)
+router.delete('/:id', async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ message: 'Course profile metadata context not found.' });
+
+    // Loop through and systematically destroy all attached binary video layouts on Cloudinary
+    if (course.chapters && course.chapters.length > 0) {
+      const deletionPromises = course.chapters.map(chapter => {
+        if (chapter.publicId) {
+          // Extracts the final key node context matching your storage configuration
+          const cleanId = chapter.publicId.split('/').pop();
+          return cloudinary.uploader.destroy(`courses/${cleanId}`, { resource_type: 'video' });
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(deletionPromises);
+    }
+
+    await Course.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Unified curriculum roadmap and cloud media purged successfully.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

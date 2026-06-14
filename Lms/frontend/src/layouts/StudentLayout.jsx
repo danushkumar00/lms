@@ -1,15 +1,16 @@
-// src/layouts/StudentLayout.jsx
-import React from 'react';
-
-// 1. ⚠️ Make sure you catch the 'children' prop here!
+import Header from "../Components/Header"
+import Footer from "../Components/Footer"
 const StudentLayout = ({ children }) => { 
   return (
     <div className="flex flex-col min-h-screen">
       
       {/* Your Existing Header */}
-      <header className="bg-yellow-300 shadow p-4">
-        <h2 className="text-xl font-bold text-black font-stretch-125% text-center">SkillSync</h2>
-      </header>
+      <Header>
+        
+
+        <h2 className="text-xl font-bold text-slate-800 text-center font-stretch-125%">SkillSync</h2>
+              </Header>
+      
 
       {/* 2. 🌟 THE FIX: Create a main slot and inject {children} right here */}
       <main className="flex-1 w-full relative">
@@ -17,9 +18,9 @@ const StudentLayout = ({ children }) => {
       </main>
 
       {/* Your Existing Footer */}
-      <footer className="bg-yellow-300 text-black p-4 text-center text-sm">
-        © 2026 SkillSync. All rights reserved.
-      </footer>
+      <Footer>
+        © 2026 Portal. All rights reserved.
+      </Footer>
 
     </div>
   );

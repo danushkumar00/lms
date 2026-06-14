@@ -9,8 +9,9 @@ const TrainerDashboard = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch all historical blueprints registered on the server on mount
-  useEffect(() => {
+  // Fetch all historical blueprints registered on the server
+  const fetchDashboardCatalog = () => {
+    setLoading(true);
     axios.get('http://localhost:5001/api/courses')
       .then((res) => {
         setCourses(res.data);
@@ -20,7 +21,40 @@ const TrainerDashboard = () => {
         console.error("Error connecting to backend program registries:", err);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchDashboardCatalog();
   }, []);
+
+  // Handle clearing user session details and routing to login screen
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to log out of the session?")) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      localStorage.removeItem('user');
+      sessionStorage.clear();
+      navigate('/login');
+    }
+  };
+
+  // NEW: Handle wiping out an entire course track and all media associations
+  const handleDeleteCourseTrack = async (courseId, courseTitle) => {
+    const primaryConfirm = window.confirm(`CRITICAL WARNING: Are you sure you want to permanently delete "${courseTitle}"?\nThis wipes all video files from Cloudinary storage and drops all matching challenge checks.`);
+    if (!primaryConfirm) return;
+
+    const safetyVerification = window.confirm("Final check: This action is irreversible. Proceed?");
+    if (!safetyVerification) return;
+
+    try {
+      await axios.delete(`http://localhost:5001/api/courses/${courseId}`);
+      alert("Success: Entire course timeline and media records purged from system clusters.");
+      // Synchronize dashboard catalog array matrix locally
+      setCourses(prev => prev.filter(c => c._id !== courseId));
+    } catch (err) {
+      alert(`Purge pipeline termination failed: ${err.response?.data?.message || err.message}`);
+    }
+  };
 
   return (
     <StudentLayout>
@@ -34,19 +68,27 @@ const TrainerDashboard = () => {
               <p className="text-sm text-gray-500">Design structural program materials, append modules, and audit check exercises.</p>
             </div>
             
-            {/* Primary Navigation Form Triggers */}
-            <div className="flex flex-wrap gap-3">
+            {/* Action Navigation Controls & Session Managers */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-start md:justify-end">
               <button 
                 onClick={() => navigate('/trainer/upload-course')}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg shadow-sm transition-all duration-150"
               >
                 + Upload New Course
               </button>
+              
               <button 
                 onClick={() => navigate('/trainer/add-chapter')}
                 className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm rounded-lg shadow-sm transition-all duration-150"
               >
                 + Add Chapter Module
+              </button>
+
+              <button 
+                onClick={handleLogout}
+                className="px-5 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-sm rounded-lg shadow-sm transition-all duration-150"
+              >
+                Logout
               </button>
             </div>
           </div>
@@ -63,7 +105,6 @@ const TrainerDashboard = () => {
                     <div>
                       <div className="h-5 bg-gray-200 rounded w-2/3 mb-3"></div>
                       <div className="h-3 bg-gray-100 rounded w-full mb-1"></div>
-                      <div className="h-3 bg-gray-100 rounded w-4/5"></div>
                     </div>
                     <div className="h-8 bg-gray-50 rounded w-full mt-4"></div>
                   </div>
@@ -84,7 +125,19 @@ const TrainerDashboard = () => {
                     className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-gray-200 transition-all duration-200"
                   >
                     <div>
-                      <h3 className="font-bold text-gray-900 text-lg line-clamp-1 mb-2">{course.title}</h3>
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <h3 className="font-bold text-gray-900 text-lg line-clamp-1">{course.title}</h3>
+                        
+                        {/* TRASH DISPOSAL DELETION TRIGGER */}
+                        <button 
+                          type="button"
+                          title="Delete Course Track"
+                          onClick={() => handleDeleteCourseTrack(course._id, course.title)}
+                          className="text-gray-300 hover:text-red-600 transition-colors duration-150 p-1 text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
                       <p className="text-gray-500 text-xs line-clamp-3 leading-relaxed mb-5">{course.description}</p>
                     </div>
                     

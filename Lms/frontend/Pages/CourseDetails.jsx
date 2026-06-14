@@ -1,228 +1,151 @@
-// frontend/src/pages/CourseDetails.jsx
-import  { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios'; 
+import axios from 'axios';
 import StudentLayout from '../src/layouts/StudentLayout';
 
 const CourseDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const videoRef = useRef(null);
   
   const [course, setCourse] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [activeChapterIdx, setActiveChapterIdx] = useState(0);
   
-  const [currentActiveQuiz, setCurrentActiveQuiz] = useState(null);
-  const [clearedQuizIds, setClearedQuizIds] = useState(new Set());
-  
-  // Matrix matching states
-  const [leftColumnItems, setLeftColumnItems] = useState([]);
-  const [shuffledRightColumn, setShuffledRightColumn] = useState([]);
-  const [matrixMatches, setMatrixMatches] = useState({}); // Stores { rightAnswerText: leftQuestionText }
-  
-  const [studentAnswer, setStudentAnswer] = useState(''); // Fallback for written blank fields
-  const [feedback, setFeedback] = useState(null);
+  // Interactive Evaluation Activity State Managers
+  const [videoFinished, setVideoFinished] = useState(false);
+  const [blankAnswers, setBlankAnswers] = useState({}); // Mapping index -> user answers string
+  const [columnMatches, setColumnMatches] = useState({}); // Mapping static right token -> dropped left token
+  const [shuffledLeftItems, setShuffledLeftItems] = useState([]);
+  const [activityFeedback, setActivityFeedback] = useState(null); 
 
+  // Direct Course Management Editor Variables
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [chaptersState, setChaptersState] = useState([]);
   const [replaceIndex, setReplaceIndex] = useState(null);
   const [newVideoFile, setNewVideoFile] = useState(null);
   const [processing, setProcessing] = useState(false);
 
-  const fetchCourseData = () => {
+  const fetchActiveTrackData = () => {
     axios.get(`http://localhost:5001/api/courses/${id}`)
       .then(({ data }) => {
-        setCourse(data); 
+        setCourse(data);
         setEditTitle(data.title);
         setEditDescription(data.description);
-        
-        const chaptersWithMinutes = (data.chapters || []).map(ch => ({
-          ...ch,
-          activities: ch.activities?.map(act => ({
-            ...act,
-            timestamp: act.timestamp / 60 
-          })) || []
-        }));
-        setChaptersState(chaptersWithMinutes);
+        initializeStudentCanvas(data.chapters[activeChapterIdx]);
       })
-      .catch(err => console.error("Data syncing error:", err));
+      .catch((err) => console.error("Error linking file tables:", err));
   };
 
   useEffect(() => {
-    if (id) fetchCourseData();
+    axios.get(`http://localhost:5001/api/courses/${id}`).then(({ data }) => {
+      setCourse(data);
+      setEditTitle(data.title);
+      setEditDescription(data.description);
+      if (data.chapters?.length > 0) initializeStudentCanvas(data.chapters[0]);
+    });
   }, [id]);
 
-  const selectNewChapter = (idx) => {
-    setActiveChapterIdx(idx);
-    setCurrentActiveQuiz(null);
-    setClearedQuizIds(new Set());
-    resetQuizStates();
-  };
+  const initializeStudentCanvas = (chapter) => {
+    if (!chapter || !chapter.activity) return;
+    setVideoFinished(false);
+    setActivityFeedback(null);
+    setBlankAnswers({});
+    setColumnMatches({});
 
-  const resetQuizStates = () => {
-    setMatrixMatches({});
-    setStudentAnswer('');
-    setFeedback(null);
-  };
-
-  const monitorPlaybackTimeline = () => {
-    if (!videoRef.current || !course?.chapters[activeChapterIdx]) return;
-    
-    const currentSeconds = Math.floor(videoRef.current.currentTime);
-    const targetActivities = course.chapters[activeChapterIdx].activities || [];
-
-    const pendingChallenge = targetActivities.find(act => 
-      act.timestamp === currentSeconds && !clearedQuizIds.has(act._id)
-    );
-
-    if (pendingChallenge && currentActiveQuiz?._id !== pendingChallenge._id) {
-      videoRef.current.pause(); 
-      setCurrentActiveQuiz(pendingChallenge);
-      resetQuizStates();
-
-      if (pendingChallenge.activityType === 'drag-drop') {
-        const lefts = pendingChallenge.question.split(',').map(s => s.trim());
-        const rights = Array.isArray(pendingChallenge.options) 
-          ? pendingChallenge.options 
-          : pendingChallenge.options.split(',').map(s => s.trim());
-        
-        setLeftColumnItems(lefts);
-        // Shuffle right column items so they aren't directly across from their match
-        setShuffledRightColumn([...rights].sort(() => Math.random() - 0.5));
-      }
+    // If it's a drag-drop match assignment, collect left choices and shuffle them cleanly
+    if (chapter.activity.activityType === 'drag-drop') {
+      const lefts = chapter.activity.matchPairs.map(p => p.left);
+      setShuffledLeftItems([...lefts].sort(() => Math.random() - 0.5));
     }
   };
 
-  const verifyActivitySolution = () => {
-    if (!currentActiveQuiz) return;
+  const selectChapterModule = (index) => {
+    setActiveChapterIdx(index);
+    initializeStudentCanvas(course.chapters[index]);
+  };
 
-    if (currentActiveQuiz.activityType === 'drag-drop') {
-      const lefts = currentActiveQuiz.question.split(',').map(s => s.trim());
-      // correct answers array maps 1:1 with left array indexes
-      const corrects = Array.isArray(currentActiveQuiz.correctAnswer)
-        ? currentActiveQuiz.correctAnswer
-        : currentActiveQuiz.correctAnswer.split(',').map(s => s.trim());
+  // Evaluate Student Answers across N items
+  const verifyChallengeSubmission = () => {
+    const act = course.chapters[activeChapterIdx].activity;
+    let isPerfect = true;
 
-      // Check if total match boxes are completed
-      if (Object.keys(matrixMatches).length < lefts.length) {
-        alert("Please connect all variables before submittal verification!");
-        return;
-      }
-
-      let passesAllRules = true;
-      for (let i = 0; i < lefts.length; i++) {
-        const standardLeftItem = lefts[i];
-        const requiredRightAnswer = corrects[i];
-        
-        if (matrixMatches[requiredRightAnswer] !== standardLeftItem) {
-          passesAllRules = false;
-          break;
+    if (act.activityType === 'fill-blanks') {
+      act.fillBlanks.forEach((item, idx) => {
+        const studentInput = blankAnswers[idx] || '';
+        if (studentInput.trim().toLowerCase() !== item.correctAnswer.trim().toLowerCase()) {
+          isPerfect = false;
         }
-      }
-
-      if (passesAllRules) {
-        setFeedback('correct');
-        setClearedQuizIds(prev => new Set([...prev, currentActiveQuiz._id]));
-        setTimeout(() => {
-          setCurrentActiveQuiz(null);
-          setFeedback(null);
-          if (videoRef.current) videoRef.current.play(); 
-        }, 1500);
-      } else {
-        setFeedback('wrong');
-      }
-    } else {
-      // Standard line fill implementation
-      if (studentAnswer.trim().toLowerCase() === currentActiveQuiz.correctAnswer.toString().trim().toLowerCase()) {
-        setFeedback('correct');
-        setClearedQuizIds(prev => new Set([...prev, currentActiveQuiz._id]));
-        setTimeout(() => {
-          setCurrentActiveQuiz(null);
-          setFeedback(null);
-          if (videoRef.current) videoRef.current.play(); 
-        }, 1500);
-      } else {
-        setFeedback('wrong');
-      }
+      });
+    } else if (act.activityType === 'drag-drop') {
+      act.matchPairs.forEach((pair) => {
+        const assignedLeft = columnMatches[pair.right] || '';
+        if (assignedLeft.trim().toLowerCase() !== pair.left.trim().toLowerCase()) {
+          isPerfect = false;
+        }
+      });
     }
+
+    setActivityFeedback(isPerfect ? 'correct' : 'wrong');
   };
 
-  const handleDropOnTargetBox = (e, targetAnswerText) => {
+  // Drag Drop Mechanics Handlers
+  const handleDragStart = (e, leftWord) => {
+    e.dataTransfer.setData("text/plain", leftWord);
+  };
+
+  const handleDropOnTarget = (e, targetRightDefinition) => {
     e.preventDefault();
-    const draggedQuestionText = e.dataTransfer.getData("text/plain");
-    
-    // Clean old bindings of this dragged question text if it was dropped elsewhere previously
-    const updatedMatches = { ...matrixMatches };
-    Object.keys(updatedMatches).forEach(key => {
-      if (updatedMatches[key] === draggedQuestionText) {
-        delete updatedMatches[key];
-      }
-    });
-
-    updatedMatches[targetAnswerText] = draggedQuestionText;
-    setMatrixMatches(updatedMatches);
+    const droppedWord = e.dataTransfer.getData("text/plain");
+    setColumnMatches(prev => ({
+      ...prev,
+      [targetRightDefinition]: droppedWord
+    }));
   };
 
-  const modifyChapterActivityField = (chIdx, actIdx, key, val) => {
-    const freshState = [...chaptersState];
-    freshState[chIdx].activities[actIdx][key] = val;
-    setChaptersState(freshState);
+  // Edit State Chapter Modification Real-time updates
+  const updateChapterActivityField = (chIdx, type, nestedIdx, field, val) => {
+    const updatedChapters = [...course.chapters];
+    if (type === 'fill-blanks') {
+      updatedChapters[chIdx].activity.fillBlanks[nestedIdx][field] = val;
+    } else if (type === 'match-pairs') {
+      updatedChapters[chIdx].activity.matchPairs[nestedIdx][field] = val;
+    } else if (type === 'meta') {
+      updatedChapters[chIdx].title = val;
+    }
+    setCourse({ ...course, chapters: updatedChapters });
   };
 
-  const removeActivityFromChapterState = (chIdx, actIdx) => {
-    const freshState = [...chaptersState];
-    freshState[chIdx].activities = freshState[chIdx].activities.filter((_, idx) => idx !== actIdx);
-    setChaptersState(freshState);
+  const addActivityRowInEditor = (chIdx, type) => {
+    const updatedChapters = [...course.chapters];
+    if (type === 'fill-blanks') {
+      updatedChapters[chIdx].activity.fillBlanks.push({ question: '', options: [], correctAnswer: '' });
+    } else if (type === 'match-pairs') {
+      updatedChapters[chIdx].activity.matchPairs.push({ left: '', right: '' });
+    }
+    setCourse({ ...course, chapters: updatedChapters });
   };
 
-  const appendNewBlankActivityToState = (chIdx) => {
-    const freshState = [...chaptersState];
-    if (!freshState[chIdx].activities) freshState[chIdx].activities = [];
-    freshState[chIdx].activities.push({
-      timestamp: 0, 
-      activityType: 'drag-drop',
-      question: '',
-      options: '',
-      correctAnswer: ''
-    });
-    setChaptersState(freshState);
-  };
-
-  const removeChapterEntirely = async (chIdx, chId, publicId) => {
-    if (!window.confirm("Delete this chapter?")) return;
-    const cleanPublicId = publicId.split('/').pop();
+  const deleteChapter = async (chapterId, fullPublicId) => {
+    if (!window.confirm("Confirm deletion of this module?")) return;
+    const cleanPublicId = fullPublicId.split('/').pop(); 
     try {
       setProcessing(true);
-      await axios.delete(`http://localhost:5001/api/courses/${id}/chapter/${chId}/${cleanPublicId}`);
-      alert("Chapter record deleted successfully.");
-      fetchCourseData();
+      await axios.delete(`http://localhost:5001/api/courses/${id}/chapter/${chapterId}/${cleanPublicId}`);
+      alert("Chapter dropped successfully.");
+      fetchActiveTrackData();
     } catch (err) {
-      alert("Error dropping asset arrays.");
-      console.log(err)
+      alert("Error dropping structural assets.");
     } finally {
       setProcessing(false);
     }
   };
 
-  const submitOverwrittenDatabaseSpecs = async (e) => {
+  const handleUpdateCourseDetails = async (e) => {
     e.preventDefault();
     const payload = new FormData();
     payload.append('title', editTitle);
     payload.append('description', editDescription);
-
-    const normalizedChapters = chaptersState.map(ch => ({
-      ...ch,
-      activities: ch.activities?.map(act => ({
-        ...act,
-        timestamp: Number(act.timestamp) * 60, 
-        options: Array.isArray(act.options) ? act.options : String(act.options).split(',').map(o => o.trim()),
-        correctAnswer: Array.isArray(act.options) ? act.options.join(',') : String(act.options)
-      }))
-    }));
-
-    payload.append('chapters', JSON.stringify(normalizedChapters));
+    payload.append('chaptersData', JSON.stringify(course.chapters));
 
     if (replaceIndex !== null && newVideoFile) {
       payload.append('replaceIndex', replaceIndex);
@@ -234,14 +157,13 @@ const CourseDetails = () => {
       await axios.put(`http://localhost:5001/api/courses/${id}`, payload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      alert("Configurations synchronized!");
+      alert("Course records updated successfully.");
       setIsEditing(false);
       setReplaceIndex(null);
       setNewVideoFile(null);
-      fetchCourseData();
+      fetchActiveTrackData();
     } catch (err) {
-      alert("Error saving properties.");
-      console.log(err)
+      alert("Error editing dashboard details.");
     } finally {
       setProcessing(false);
     }
@@ -250,14 +172,14 @@ const CourseDetails = () => {
   if (!course) {
     return (
       <StudentLayout>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-500 text-sm">
-          Loading course blueprints...
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <p className="text-gray-400 animate-pulse font-medium">Syncing interface files...</p>
         </div>
       </StudentLayout>
     );
   }
 
-  const activeChapter = course.chapters[activeChapterIdx];
+  const currentChapter = course.chapters[activeChapterIdx];
 
   return (
     <StudentLayout>
@@ -265,13 +187,14 @@ const CourseDetails = () => {
         <div className="max-w-7xl mx-auto flex flex-col gap-5">
           
           <div className="flex justify-between items-center">
-            <button onClick={() => navigate('/trainer-dashboard')} className="font-semibold text-sm text-blue-600">&larr; Back Dashboard Hub</button>
+            <button onClick={() => navigate('/trainer-dashboard')} className="font-semibold text-sm text-blue-600">&larr; Back to Admin Hub</button>
             <button onClick={() => setIsEditing(!isEditing)} className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border rounded-lg shadow-sm">
-              {isEditing ? '🔌 Show View Presentation Monitor' : '⚙️ Manage Activities & Core Elements'}
+              {isEditing ? 'View Interactive Player' : 'Open Content Schema Editor'}
             </button>
           </div>
 
           {!isEditing ? (
+            /* ================= MODE A: INTERACTIVE PRESENTATION LEARNER VIEW ================= */
             <div className="flex flex-col gap-6">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">{course.title}</h1>
@@ -279,218 +202,185 @@ const CourseDetails = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Video Column Panel */}
                 <div className="lg:col-span-2 bg-white rounded-xl p-4 shadow-sm border">
-                  <h2 className="font-bold mb-3 text-base text-gray-800">Chapter {activeChapterIdx + 1}: {activeChapter?.title}</h2>
-                  <div className="aspect-video bg-black rounded-lg overflow-hidden relative shadow-inner">
-                    {activeChapter && (
+                  <h2 className="font-bold mb-3 text-base text-gray-800">Chapter {activeChapterIdx + 1}: {currentChapter?.title}</h2>
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-inner">
+                    {currentChapter && (
                       <video 
-                        ref={videoRef}
-                        onTimeUpdate={monitorPlaybackTimeline}
-                        controls 
-                        src={activeChapter.videoUrl} 
-                        className="w-full h-full object-contain"
+                        key={currentChapter._id} controls src={currentChapter.videoUrl} className="w-full h-full object-contain"
+                        onEnded={() => setVideoFinished(true)} 
                       />
                     )}
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl p-5 shadow-sm border min-h-[385px] flex flex-col justify-between">
-                  {!currentActiveQuiz ? (
+                {/* Unlocked Activities Sidebar Container */}
+                <div className="bg-white rounded-xl p-5 shadow-sm border min-h-[380px] flex flex-col justify-between">
+                  {!videoFinished ? (
                     <div className="flex flex-col items-center justify-center text-center p-8 my-auto text-gray-400">
-                      <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-dotted animate-spin mb-3"></div>
-                      <p className="text-xs font-bold text-gray-700">Timeline Stream Monitor Active</p>
-                      <p className="text-[11px] max-w-[190px] mt-1 text-gray-400">Video pauses when a matrix challenge triggers.</p>
+                      <div className="w-10 h-10 rounded-full border-4 border-dashed border-gray-200 animate-spin mb-4"></div>
+                      <p className="text-sm font-semibold text-gray-700">Challenge Workspace Locked</p>
+                      <p className="text-xs max-w-[190px] mt-1">Finish this module video to unlock the verification checklist checkpoints.</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-4 animate-fadeIn">
-                      <span className="bg-amber-100 text-amber-800 text-[9px] uppercase font-black w-fit px-2 py-0.5 rounded animate-pulse">
-                        ⚠️ Checkpoint Challenge Activated
-                      </span>
-                      <h3 className="font-bold text-gray-900 text-sm">
-                        {currentActiveQuiz.activityType === 'drag-drop' ? '🤝 Drag Left Items to Right Answers' : '✍️ Complete the Phrase Given'}
-                      </h3>
-
-                      {currentActiveQuiz.activityType === 'drag-drop' ? (
-                        <div className="flex flex-col gap-4">
-                          <p className="text-[11px] text-gray-400 font-medium">Match each term on the left with its partner on the right:</p>
-                          
-                          <div className="grid grid-cols-2 gap-4 items-center">
-                            {/* Left Side: Drag Sources */}
-                            <div className="flex flex-col gap-2.5">
-                              <span className="text-[10px] text-center font-bold text-gray-400 uppercase">Terms</span>
-                              {leftColumnItems.map((item, idx) => {
-                                // Check if this item is currently assigned to any right box
-                                const isAssigned = Object.values(matrixMatches).includes(item);
-                                return (
-                                  <div
-                                    key={idx}
-                                    draggable={!isAssigned}
-                                    onDragStart={e => e.dataTransfer.setData("text/plain", item)}
-                                    className={`p-2 border text-center text-xs font-bold rounded-xl shadow-sm transition-all select-none ${
-                                      isAssigned 
-                                        ? 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed line-through shadow-none' 
-                                        : 'bg-indigo-50 border-indigo-200 text-indigo-900 cursor-grab active:cursor-grabbing hover:bg-indigo-100'
-                                    }`}
-                                  >
-                                    {item}
-                                  </div>
-                                );
-                              })}
+                    <div className="flex flex-col gap-4">
+                      <span className="bg-purple-100 text-purple-700 text-[10px] uppercase font-extrabold w-fit px-2 py-0.5 rounded">Syllabus Checkpoint</span>
+                      
+                      {/* SUB-VIEW 1: N NUMBER OF FILL IN THE BLANKS */}
+                      {currentChapter?.activity?.activityType === 'fill-blanks' && (
+                        <div className="flex flex-col gap-4 max-h-[400px] overflow-y-auto pr-1">
+                          <h3 className="font-bold text-xs text-gray-900">✍️ Complete all blanks sentences below:</h3>
+                          {currentChapter.activity.fillBlanks.map((item, idx) => (
+                            <div key={idx} className="border-b pb-3 flex flex-col gap-1.5">
+                              <p className="text-xs text-gray-700 leading-relaxed font-medium">{idx + 1}. {item.question.replace('___', '______')}</p>
+                              <input 
+                                type="text" placeholder="Type answer..." 
+                                className="w-full border rounded p-1.5 text-xs outline-none bg-gray-50 focus:bg-white"
+                                value={blankAnswers[idx] || ''} 
+                                onChange={e => setBlankAnswers({...blankAnswers, [idx]: e.target.value})} 
+                              />
+                              <div className="text-[10px] text-gray-400">Choices: {Array.isArray(item.options) ? item.options.join(', ') : item.options}</div>
                             </div>
-
-                            {/* Right Side: Landing Boxes */}
-                            <div className="flex flex-col gap-2.5">
-                              <span className="text-[10px] text-center font-bold text-gray-400 uppercase">Answers</span>
-                              {shuffledRightColumn.map((ansText, idx) => {
-                                const assignedLeftItem = matrixMatches[ansText];
-                                return (
-                                  <div
-                                    key={idx}
-                                    onDragOver={e => e.preventDefault()}
-                                    onDrop={e => handleDropOnTargetBox(e, ansText)}
-                                    className={`p-2 border-2 rounded-xl flex flex-col items-center justify-center min-h-[64px] text-center transition-all ${
-                                      assignedLeftItem 
-                                        ? 'border-emerald-400 bg-emerald-50/10' 
-                                        : 'border-dashed border-slate-300 bg-slate-50 hover:border-amber-400'
-                                    }`}
-                                  >
-                                    <span className="text-[11px] font-bold text-slate-800 mb-1">{ansText}</span>
-                                    {assignedLeftItem ? (
-                                      <span 
-                                        onClick={() => {
-                                          const cleared = { ...matrixMatches };
-                                          delete cleared[ansText];
-                                          setMatrixMatches(cleared);
-                                        }}
-                                        className="text-[9px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded cursor-pointer hover:bg-red-500 shadow-sm"
-                                        title="Click to remove connection"
-                                      >
-                                        ⬅️ {assignedLeftItem}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[9px] text-slate-400 tracking-tight">Drop Match Here</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-3">
-                          <p className="text-xs text-gray-600 leading-relaxed">{currentActiveQuiz.question.replace('___', '______')}</p>
-                          <input type="text" placeholder="Type answer..." className="w-full border rounded-lg p-2 text-xs outline-none shadow-inner" value={studentAnswer} onChange={e => setStudentAnswer(e.target.value)} />
+                          ))}
                         </div>
                       )}
 
-                      <button onClick={verifyActivitySolution} className="w-full bg-slate-900 text-white text-xs font-bold py-2 rounded-lg mt-2 shadow-sm hover:bg-slate-800">Submit Validation</button>
-                      {feedback === 'correct' && <div className="p-3 bg-emerald-100 border text-emerald-800 text-xs font-bold rounded-lg animate-bounce">🎉 Complete Success! Stream Unlocking...</div>}
-                      {feedback === 'wrong' && <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs font-semibold rounded-lg">❌ Combinations mismatched. Try re-assigning variables.</div>}
+                      {/* SUB-VIEW 2: N NUMBER MATCH THE FOLLOWING GRID (DRAG & DROP) */}
+                      {currentChapter?.activity?.activityType === 'drag-drop' && (
+                        <div className="flex flex-col gap-3">
+                          <h3 className="font-bold text-xs text-gray-900">🤝 Drag words from Left into their Right Target options:</h3>
+                          
+                          {/* Draggable Source Option Bank */}
+                          <div className="flex flex-wrap gap-1.5 bg-gray-50 p-2 rounded-lg border border-dashed mb-2">
+                            {shuffledLeftItems.map((word, index) => (
+                              <div 
+                                key={index} draggable onDragStart={e => handleDragStart(e, word)}
+                                className="bg-white px-2 py-1 text-xs font-semibold rounded border shadow-sm cursor-grab active:cursor-grabbing text-purple-800 border-purple-200 hover:bg-purple-50"
+                              >
+                                {word}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Two-Column Mapping Grid Workspace */}
+                          <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+                            {currentChapter.activity.matchPairs.map((pair, idx) => (
+                              <div key={idx} className="grid grid-cols-2 gap-2 items-center border p-2 rounded-lg bg-white shadow-xs">
+                                {/* Left Drop Target Zone Slot */}
+                                <div 
+                                  onDragOver={e => e.preventDefault()} 
+                                  onDrop={e => handleDropOnTarget(e, pair.right)}
+                                  className="border border-dashed border-purple-300 bg-purple-50/20 text-purple-900 rounded p-1.5 text-center text-[11px] font-bold min-h-[32px] flex items-center justify-center"
+                                >
+                                  {columnMatches[pair.right] ? `🎯 ${columnMatches[pair.right]}` : 'Drop Match Here'}
+                                </div>
+                                {/* Right Static Match Key Label description */}
+                                <div className="text-xs text-gray-600 font-medium pl-1 line-clamp-2 leading-tight">
+                                  {pair.right}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <button onClick={verifyChallengeSubmission} className="w-full bg-purple-600 text-white text-xs font-bold py-2 rounded-lg mt-2">Submit Verification Pack</button>
+                      {activityFeedback === 'correct' && <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-lg">🎉 Perfect! Knowledge node verified.</div>}
+                      {activityFeedback === 'wrong' && <div className="p-2.5 bg-red-50 border border-red-200 text-red-800 text-xs font-semibold rounded-lg">❌ Mismatched values found. Try adjusting options.</div>}
                     </div>
                   )}
                 </div>
               </div>
 
               <section className="bg-white rounded-xl p-5 border shadow-sm">
-                <h3 className="font-bold text-gray-900 mb-3 border-b pb-2 text-sm">Program Curriculum Syllabus</h3>
+                <h3 className="font-bold text-gray-900 mb-3 border-b pb-2">Program Curriculum Syllabus Roadmap</h3>
                 <div className="flex flex-col gap-2">
-                  {course.chapters?.map((ch, idx) => (
-                    <div key={ch._id || idx} onClick={() => selectNewChapter(idx)} className={`p-3 rounded-lg flex justify-between items-center text-xs font-medium cursor-pointer transition-all ${activeChapterIdx === idx ? 'bg-blue-50 border-l-4 border-blue-600 text-blue-900 font-bold' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                  {course.chapters.map((ch, idx) => (
+                    <div key={ch._id} onClick={() => selectChapterModule(idx)} className={`p-3 rounded-lg flex justify-between items-center text-sm font-medium cursor-pointer transition-all ${activeChapterIdx === idx ? 'bg-blue-50 border-l-4 border-blue-600 text-blue-900' : 'bg-gray-50 hover:bg-gray-100'}`}>
                       <span>Chapter {idx + 1}: {ch.title}</span>
-                      <span className="text-[10px] bg-white border px-2 py-0.5 rounded text-gray-400 font-bold uppercase">{ch.activities?.length || 0} Events Linked</span>
+                      <span className="text-xs bg-white border px-2 py-0.5 rounded text-gray-400 capitalize">{ch.activity?.activityType === 'fill-blanks' ? 'Blanks List' : 'Matching Matrix'}</span>
                     </div>
                   ))}
                 </div>
               </section>
             </div>
           ) : (
-            <form onSubmit={submitOverwrittenDatabaseSpecs} className="bg-white rounded-xl p-6 border shadow-sm flex flex-col gap-5">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Curriculum Layout Modification Matrix</h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+            /* ================= MODE B: ADVANCED CURRICULUM MANAGEMENT MASTER EDITOR ================= */
+            <form onSubmit={handleUpdateCourseDetails} className="bg-white rounded-xl p-6 border shadow-sm flex flex-col gap-5">
+              <h2 className="text-xl font-bold text-gray-900 border-b pb-2">Dynamic Specification Blueprint Form Editor</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Global Track Title</label>
-                  <input type="text" className="w-full border rounded-lg p-2 text-sm outline-none" value={editTitle} onChange={e => setEditTitle(e.target.value)} required />
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Global Track Title</label>
+                  <input type="text" className="w-full border rounded-lg p-2.5 text-sm outline-none" value={editTitle} onChange={e => setEditTitle(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Global Narrative Description</label>
-                  <input type="text" className="w-full border rounded-lg p-2 text-sm outline-none" value={editDescription} onChange={e => setEditDescription(e.target.value)} required />
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Global Summary Description Narrative</label>
+                  <input type="text" className="w-full border rounded-lg p-2.5 text-sm outline-none" value={editDescription} onChange={e => setEditDescription(e.target.value)} required />
                 </div>
               </div>
 
-              <div className="flex flex-col gap-6 mt-2">
-                <h3 className="font-bold text-xs text-gray-700 border-b pb-1 uppercase tracking-wider">Dynamic Component Chapter Bundles</h3>
+              {/* ITERATIVE SECTION FOR ADJUSTING AND SAVING N QUESTIONS DIRECTLY */}
+              <div className="flex flex-col gap-6 mt-2 border-t pt-4">
+                <h3 className="font-bold text-sm text-gray-800">Operational Module Configuration Matrix</h3>
                 
-                {chaptersState.map((ch, chIdx) => (
-                  <div key={ch._id || chIdx} className="p-5 bg-slate-50/50 rounded-xl border border-slate-200 flex flex-col gap-4">
-                    <div className="flex justify-between items-center border-b pb-2">
-                      <span className="font-bold text-sm text-slate-800">Chapter Module {chIdx + 1}: {ch.title}</span>
+                {course.chapters.map((ch, chIdx) => (
+                  <div key={ch._id || chIdx} className="border rounded-xl p-4 bg-gray-50 flex flex-col gap-4">
+                    <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border shadow-xs">
+                      <div className="flex gap-2 items-center w-2/3">
+                        <span className="text-xs font-extrabold text-blue-700">Ch {chIdx + 1}:</span>
+                        <input type="text" className="border-b font-semibold text-xs outline-none bg-transparent w-full" value={ch.title} onChange={e => updateChapterActivityField(chIdx, 'meta', null, null, e.target.value)} />
+                      </div>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => setReplaceIndex(chIdx)} className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded">Replace Video File</button>
-                        <button type="button" onClick={() => removeChapterEntirely(chIdx, ch._id, ch.publicId)} className="text-xs font-bold bg-red-50 text-red-600 px-2 py-1 rounded">Remove Full Chapter</button>
+                        <button type="button" onClick={() => setReplaceIndex(chIdx)} className="text-[11px] bg-blue-50 text-blue-600 font-bold px-2 py-1 rounded">Swap Video</button>
+                        <button type="button" onClick={() => deleteChapter(ch._id, ch.publicId)} className="text-[11px] bg-red-50 text-red-600 font-bold px-2 py-1 rounded">Drop Chapter</button>
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-3 bg-white p-4 rounded-lg border shadow-inner">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-purple-900 uppercase">Interactive Timestamp Events Map ({ch.activities?.length || 0})</span>
-                        <button type="button" onClick={() => appendNewBlankActivityToState(chIdx)} className="text-[11px] font-bold bg-purple-600 text-white px-2.5 py-1 rounded-md shadow-sm">+ Insert New Timed Question</button>
-                      </div>
-
-                      <div className="flex flex-col gap-3 mt-1">
-                        {ch.activities?.map((act, actIdx) => (
-                          <div key={act._id || actIdx} className="p-3 bg-purple-50/20 rounded-md border border-purple-100 flex flex-col gap-2 relative">
-                            <button type="button" onClick={() => removeActivityFromChapterState(chIdx, actIdx)} className="absolute top-2 right-2 text-[10px] font-bold text-red-500 hover:underline">Delete Activity</button>
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                              <div>
-                                <label className="text-[10px] text-gray-400 font-bold block mb-0.5">Trigger (Minutes)</label>
-                                <input type="number" step="any" placeholder="e.g. 2.5" className="border rounded p-1 text-xs w-full bg-white outline-none" value={act.timestamp} onChange={e => modifyChapterActivityField(chIdx, actIdx, 'timestamp', e.target.value)} required />
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-gray-400 font-bold block mb-0.5">Type Structure</label>
-                                <select className="border rounded p-1 text-xs w-full bg-white outline-none" value={act.activityType} onChange={e => modifyChapterActivityField(chIdx, actIdx, 'activityType', e.target.value)}>
-                                  <option value="drag-drop">Drag Drop Matrix</option>
-                                  <option value="fill-blanks">Fill Blanks</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] text-gray-400 font-bold block mb-0.5">
-                                  {act.activityType === 'drag-drop' ? 'Left Column Items (separated by commas)' : 'Question Prompt'}
-                                </label>
-                                <input type="text" className="border rounded p-1.5 text-xs w-full bg-white outline-none" value={act.question} onChange={e => modifyChapterActivityField(chIdx, actIdx, 'question', e.target.value)} required />
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-gray-400 font-bold block mb-0.5">
-                                  {act.activityType === 'drag-drop' ? 'Right Column Matching Answers (separated by commas)' : 'Choices options'}
-                                </label>
-                                <input type="text" className="border rounded p-1.5 text-xs w-full bg-white outline-none" value={act.options} onChange={e => modifyChapterActivityField(chIdx, actIdx, 'options', e.target.value)} required />
-                              </div>
-                            </div>
+                    {/* EDIT N BLANKS SUB-FORMS */}
+                    {ch.activity?.activityType === 'fill-blanks' && (
+                      <div className="pl-4 flex flex-col gap-3 border-l-2 border-purple-200">
+                        <span className="text-[11px] font-bold text-purple-800">Dynamic Blanks Item Fields (N Number)</span>
+                        {ch.activity.fillBlanks?.map((item, nestedIdx) => (
+                          <div key={nestedIdx} className="bg-white p-3 rounded-lg border grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                            <input type="text" placeholder="Sentence ('___')" className="border rounded p-1.5 outline-none" value={item.question} onChange={e => updateChapterActivityField(chIdx, 'fill-blanks', nestedIdx, 'question', e.target.value)} />
+                            <input type="text" placeholder="Choices (comma separated)" className="border rounded p-1.5 outline-none" value={Array.isArray(item.options) ? item.options.join(', ') : item.options} onChange={e => updateChapterActivityField(chIdx, 'fill-blanks', nestedIdx, 'options', e.target.value.split(','))} />
+                            <input type="text" placeholder="Correct Token Match" className="border rounded p-1.5 outline-none" value={item.correctAnswer} onChange={e => updateChapterActivityField(chIdx, 'fill-blanks', nestedIdx, 'correctAnswer', e.target.value)} />
                           </div>
                         ))}
+                        <button type="button" onClick={() => addActivityRowInEditor(chIdx, 'fill-blanks')} className="text-[10px] w-fit bg-purple-100 text-purple-700 font-bold px-2.5 py-1 rounded">+ Add New Blank Sentence Row</button>
                       </div>
-                    </div>
+                    )}
+
+                    {/* EDIT N MATCH PAIRS SUB-FORMS */}
+                    {ch.activity?.activityType === 'drag-drop' && (
+                      <div className="pl-4 flex flex-col gap-3 border-l-2 border-purple-200">
+                        <span className="text-[11px] font-bold text-purple-800">Column Relation Match Pair Mappings (N Number)</span>
+                        {ch.activity.matchPairs?.map((pair, nestedIdx) => (
+                          <div key={nestedIdx} className="bg-white p-2 rounded-lg border grid grid-cols-2 gap-2 text-xs">
+                            <input type="text" placeholder="Left Draggable Word" className="border rounded p-1.5 outline-none" value={pair.left} onChange={e => updateChapterActivityField(chIdx, 'match-pairs', nestedIdx, 'left', e.target.value)} />
+                            <input type="text" placeholder="Right Target Definition" className="border rounded p-1.5 outline-none" value={pair.right} onChange={e => updateChapterActivityField(chIdx, 'match-pairs', nestedIdx, 'right', e.target.value)} />
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => addActivityRowInEditor(chIdx, 'match-pairs')} className="text-[10px] w-fit bg-purple-100 text-purple-700 font-bold px-2.5 py-1 rounded">+ Add New Matching Connection Item</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
 
               {replaceIndex !== null && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-900">
-                  ⚠️ Target scheduling replacement active for Chapter row: {replaceIndex + 1}
-                  <input type="file" accept="video/*" required className="w-full text-xs text-gray-500 cursor-pointer mt-2" onChange={e => setNewVideoFile(e.target.files[0])} />
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-col gap-1.5">
+                  <p className="text-xs font-bold text-amber-900">Uploading new media asset container row to replace index: {replaceIndex + 1}</p>
+                  <input type="file" accept="video/*" required className="text-xs cursor-pointer" onChange={e => setNewVideoFile(e.target.files[0])} />
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <button type="button" onClick={() => { setIsEditing(false); setReplaceIndex(null); }} className="px-4 py-2 text-xs border rounded-lg">Cancel Form Overwrites</button>
+              <div className="flex gap-2 justify-end border-t pt-4">
+                <button type="button" onClick={() => { setIsEditing(false); setReplaceIndex(null); }} className="px-4 py-2 text-xs border rounded-lg">Cancel Form Changes</button>
                 <button type="submit" disabled={processing} className="px-5 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg shadow-sm">
-                  {processing ? 'Processing...' : 'Save Unified System Blueprint'}
+                  {processing ? 'Processing Streams...' : 'Save Unified Curriculum Schema Changes'}
                 </button>
               </div>
             </form>

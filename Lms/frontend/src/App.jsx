@@ -1,46 +1,33 @@
-import Layout from './layouts/Layout'
-import './App.css'
-import AuthLayout from '../src/layouts/authLayout';
-import { Route, Routes } from "react-router-dom";
-import SignIn from '../Pages/SignIn';
-import SignUp from '../Pages/SignUp'; // Imported the SignUp component
-import StudentDashboard from '../Pages/StudentDashboard'
+
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Import your existing components
+import SignIn from '../Pages/SignIn'; 
+import StudentDashboard from '../Pages/StudentDashboard';
 import TrainerDashboard from '../Pages/TrainerDashboard';
 
-// Temporary placeholder components for dashboards. 
-// You can replace these with your actual page components later!
-
-
-
+// 🌟 Import your new curriculum views
+import UploadCourse from '../Pages/UploadCourse';
+import AddChapter from '../Pages/AddChapter';
+import CourseDetails from '../Pages/CourseDetails';
 
 function App() {
   return (
-    <Routes>
-      {/* Home Route */}
-      <Route path="/" element={
-        <Layout></Layout>
-      }/>
-    <Route element={<AuthLayout />}>
-     {/* Authentication Routes */}
-      <Route path="/SignIn" element={
-        <SignIn/>
-      }/>
-      
-      <Route path="/SignUp" element={
-        <SignUp/>
-      }/></Route>
-     
+  
+      <Routes>
+        {/* Your Existing Routes */}
+        <Route path="/SignIn" element={<SignIn />} />
+        <Route path="/student-dashboard" element={<StudentDashboard />} />
+        <Route path="/trainer-dashboard" element={<TrainerDashboard />} />
 
-      {/* Role-Based Dashboard Routes */}
-      <Route path="/student-dashboard" element={
-        <StudentDashboard/>
-      }/>x
-      
-      <Route path="/trainer-dashboard" element={
-        <TrainerDashboard />
-      }/>
-    </Routes>
-  )
-};
+        {/* 🌟 Hook Up Your New Course Management Pages */}
+        <Route path="/trainer/upload-course" element={<UploadCourse />} />
+        <Route path="/trainer/add-chapter" element={<AddChapter />} />
+        <Route path="/trainer/course/:id" element={<CourseDetails />} />
+        
+      </Routes>
+    
+  );
+}
 
 export default App;
